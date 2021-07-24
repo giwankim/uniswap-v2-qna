@@ -55,13 +55,7 @@ Hence when swapping $x$ for $y$, we get $\Delta y = \frac{y \phi \Delta x}{x + \
 
 #### Answer 2 (`uniswap-v2-core`)
 
-Fee accounting can also be seen in `UniswapV2Pair.sol` of `uniswap-v2-core`. The low-level function in `UniswapV2Pair.sol` that implements the swap functionality is
-```javascript
-function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data)
-```
-
-Fee subtraction on lines 180-181 in the body of the `swap` function as follows:
-
+Fee accounting can also be seen in the `swap` function of the core contract `UniswapV2Pair.sol`. Notice the following lines in the `swap` function body that subtracts 0.03% of `amountIn` as fee before assigning adjusted token balances to `balance{0,1}Adjusted`:
 ```javascript
 uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(3));
 uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(3));
@@ -72,34 +66,36 @@ As an aside, we note that Uniswap requires `swap` function callers to specify ho
 
 #### Q1-2. 수취된 수수료는 어디에 어떤 방식으로 저장되나요? ex) ETH에서 수취한 수수료는 Pool 내의 ETH Balance를 저장하는 곳에 함께 저장됩니다.
 
-**The fee is held by the `UniswapV2Pool` contract.**
+**The fee is "held" by the `UniswapV2Pool` contract.**
 
-- Implementations of ERC-20 tokens have a data structure that records balances held by various addresses; for example, in [OpenZeppelin's implementation](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol) of ERC20, there is a member variable `mapping(address => uint256) private _balances` that maps addresses to positive integer values (balance). Implementation of `balanceOf` does a simple lookup from the table:
+#### ERC-20 Mechanics
+To be more precise in our answer, let's go over some basics of ERC-20 token mechanics. Implementations of ERC-20 tokens have a data structure that records the amount of tokens the various address hold. For example, in OpenZeppelin's [implementation](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol) of ERC20, there is a member variable `_balances` of type `mapping(address => uint256) private` that maps addresses to positive integer values (balance). The '_' in front of the variable name means that clients should interface with the internal data structure with public or external methods. The most common method of interaction is to ask the token contract for the balance held by an address; as a metter of fact, their implementation of `balanceOf` does a simple lookup from the mapping (table):
 ```javascript
 function balanceOf(address account) public view virtual override returns (uint256) {
     return _balances[account];
 }
 ```
-- As for how `UniswapV2Pair` contract keeps track of its token balances, the relevant instance variables of `UniswapV2Pair` are 
+Each implementation of ERC-20 varies and in fact, Uniswap's ERC-20 liquidity pool token implementation is the core contract `UniswapV2ERC20.sol`.
+
+#### `UniswapV2Pair` member variables
+`UniswapV2Pair` contract keeps track of its token reserves and token addresses as member variables:
 ```javascript
 address public token0;
 address public token1;
-```
-that hold token addresses and
-```javascript
 uint112 private reserve0;
 uint112 private reserve1;
 ```
-that record token balances of the liquidity pool. The reserve balances and necessary data for the price oracle are kept up to date by invoking
+The reserve balances and price oracle data are kept up to date by invoking
 ```javascript
 function _update(uint balance0, uint balance1, uint112 _reserve0, uint112 _reserve1) private
 ```
-at the end of core contract functions such as `mint`, `burn`, and `swap`.
+at the end of core state-changing functions such as `mint`, `burn`, and `swap`.
 
 
 ### Q2. 스왑시 '유동성 제공자 수수료'라고 표기 되는 값은 어떻게 결정되나요?
 
-[0.03% of `amountIn` theoretically from the smart contract. But to be absolutely sure look at `uniswap-interface` and corresponding sdk function calls.]
+[0.03% of `amountIn` obviously? 
+TODO: But to be absolutely sure look at `uniswap-interface` and corresponding sdk function calls.]
 
 
 ### Q3. 스왑요청을 처리하는 방식은 어떻게 되어 있나요? ex) 시간순서대로 먼저 요청이 온것을 처리하는지, 스왑요청 수량이 큰 순서대로 처리하는지, 앞 내용들의 하이브리드 방식인지.
